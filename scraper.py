@@ -387,6 +387,45 @@ def write_metrics(result: dict, alert_sent: bool, run_success: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
+def send_daily_digest(comp: dict | None, result: dict) -> None:
+    """Send a daily status/heartbeat email confirming the system is running."""
+    now = datetime.now()
+    subject = f"TeetimeFinder daily digest — {now.strftime('%a %d %b %Y')}"
+
+    lines = ["TeetimeFinder is running normally.", ""]
+
+    if comp is None:
+        lines.append("Next competition: no upcoming Saturday competition found.")
+    else:
+        lines.append(f"Next competition: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}")
+        if result.get("player_not_entered"):
+            lines.append(f"Status: '{PLAYER_NAME}' not yet on the tee sheet.")
+        else:
+            lines.append(f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})")
+            if result["alert_needed"]:
+                lines.append(f"Early slots available before {CUTOFF_TIME}:")
+                for slot in result["available_early_slots"]:
+                    lines.append(f"  {slot['time']}  ({slot['empty_slots']} empty place(s))")
+            else:
+                lines.append("No early slots currently available — nothing to move to yet.")
+
+    lines += ["", "— TeetimeFinder"]
+
+    body = "\n".join(lines)
+    msg = MIMEText(body)
+    msg["Subject"] = subject
+    msg["From"] = SMTP_USER
+    msg["To"] = ALERT_TO
+
+    log.info(f"Sending daily digest to {ALERT_TO}...")
+    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
+        smtp.ehlo()
+        smtp.starttls()
+        smtp.login(SMTP_USER, SMTP_PASS)
+        smtp.sendmail(SMTP_USER, [ALERT_TO], msg.as_string())
+    log.info("Daily digest sent.")
+
+
 def send_alert_email(comp: dict, result: dict) -> None:
     """Send an email alert listing available early tee times."""
     slots = result["available_early_slots"]
@@ -439,6 +478,7 @@ def main():
     parser.add_argument("--parse-teesheet", action="store_true", help="Parse competition tee sheet")
     parser.add_argument("--analyse", action="store_true", help="Analyse tee sheet for early slots")
     parser.add_argument("--test-email", action="store_true", help="Send a test email")
+    parser.add_argument("--daily-digest", action="store_true", help="Send daily status/heartbeat email")
     parser.add_argument("--debug", action="store_true", help="Save raw HTML to debug_output.html")
     args = parser.parse_args()
 
@@ -537,6 +577,22 @@ def main():
             sys.exit(0)
         except Exception as exc:
             log.error(f"Failed to send email: {exc}")
+            sys.exit(1)
+
+    if args.daily_digest:
+        try:
+            session = login()
+            comp = find_next_saturday_comp(session)
+            digest_result = {"player_not_entered": True, "alert_needed": False, "available_early_slots": []}
+            if comp:
+                tee_times = parse_teesheet(session, comp["compid"], debug=args.debug)
+                if tee_times:
+                    digest_result = analyse(tee_times)
+            send_daily_digest(comp, digest_result)
+            print("Daily digest sent")
+            sys.exit(0)
+        except Exception as exc:
+            log.error(f"Failed to send daily digest: {exc}")
             sys.exit(1)
 
     # Full run

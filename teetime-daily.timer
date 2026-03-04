@@ -1,0 +1,9 @@
+[Unit]
+Description=Run TeetimeFinder daily digest once per day
+
+[Timer]
+OnCalendar=*-*-* 08:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
