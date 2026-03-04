@@ -1,0 +1,277 @@
+{
+  "project": "TeetimeFinder",
+  "description": "Monitor St Annes Old Links competition tee sheet and alert user when an early tee time becomes available.",
+  "target_url": "https://www.stannesoldlinks.com/",
+  "platform": "IntelligentGolf v10.1.2",
+  "auth": {
+    "method": "session_cookie",
+    "login_url": "https://www.stannesoldlinks.com/login.php",
+    "fields": [
+      "login",
+      "pin"
+    ]
+  },
+  "tech_stack": {
+    "language": "python3",
+    "dependencies": [
+      "requests",
+      "beautifulsoup4",
+      "python-dotenv"
+    ],
+    "stdlib_used": [
+      "smtplib",
+      "json",
+      "datetime",
+      "argparse",
+      "logging"
+    ]
+  },
+  "env_vars": [
+    {
+      "name": "MEMBER_ID",
+      "description": "Member login ID",
+      "required": true
+    },
+    {
+      "name": "MEMBER_PIN",
+      "description": "Member PIN number",
+      "required": true
+    },
+    {
+      "name": "PLAYER_NAME",
+      "description": "Name as displayed on tee sheet",
+      "required": true
+    },
+    {
+      "name": "CUTOFF_TIME",
+      "description": "Alert if player tee time is at or after this (HH:MM)",
+      "required": true,
+      "default": "10:00"
+    },
+    {
+      "name": "SMTP_HOST",
+      "description": "SMTP server hostname",
+      "required": true
+    },
+    {
+      "name": "SMTP_PORT",
+      "description": "SMTP server port",
+      "required": true,
+      "default": "587"
+    },
+    {
+      "name": "SMTP_USER",
+      "description": "SMTP login email address",
+      "required": true
+    },
+    {
+      "name": "SMTP_PASS",
+      "description": "SMTP password or app password",
+      "required": true
+    },
+    {
+      "name": "ALERT_TO",
+      "description": "Email address to receive alerts",
+      "required": true
+    }
+  ],
+  "cli_flags": [
+    {
+      "flag": "--test-login",
+      "description": "Test authentication only, print result, exit"
+    },
+    {
+      "flag": "--find-comp",
+      "description": "Discover next Saturday competition compid, print, exit"
+    },
+    {
+      "flag": "--parse-teesheet",
+      "description": "Parse tee sheet, print all tee times and players, exit"
+    },
+    {
+      "flag": "--analyse",
+      "description": "Run full analysis, print result without sending email, exit"
+    },
+    {
+      "flag": "--test-email",
+      "description": "Send a test email to ALERT_TO, print result, exit"
+    },
+    {
+      "flag": "--debug",
+      "description": "Save raw competition page HTML to debug_output.html"
+    }
+  ],
+  "chunks": [
+    {
+      "id": 1,
+      "name": "Project Scaffolding + Login",
+      "goal": "Create project structure and implement member login with session cookie handling.",
+      "files_created": [
+        "scraper.py",
+        "requirements.txt",
+        ".gitignore",
+        ".env.example"
+      ],
+      "files_modified": [],
+      "implementation_notes": [
+        "Use requests.Session() to persist cookies",
+        "GET login page first to capture any hidden form fields or CSRF tokens",
+        "POST to https://www.stannesoldlinks.com/member_login with fields: login=MEMBER_ID, pin=MEMBER_PIN",
+        "Check response URL or content to confirm login success",
+        "Implement --test-login flag"
+      ],
+      "pass_criteria": [
+        "pip install -r requirements.txt completes without error",
+        "python3 scraper.py --test-login prints 'Login successful' and exits with code 0",
+        ".env.example contains all 9 required variable names",
+        ".gitignore includes .env, __pycache__, *.pyc, last_alert.json, debug_output.html"
+      ],
+      "fail_criteria": [
+        "pip install fails for any dependency",
+        "Login returns HTTP error or stays on login page",
+        "Script raises an unhandled exception",
+        "Script prints 'Login failed'"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "Competition Discovery",
+      "goal": "Find the compid for the next upcoming Saturday competition via AJAX.",
+      "files_created": [],
+      "files_modified": [
+        "scraper.py"
+      ],
+      "implementation_notes": [
+        "POST to https://www.stannesoldlinks.com/competition2.php",
+        "Body: requestType=ajax, ajaxaction=compsfilter, fromdate=<today>, todate=<today+14days>",
+        "Parse response HTML for competition links matching pattern: /competition2.php?tab=details&compid=",
+        "Filter for competitions whose date falls on a Saturday (weekday() == 5)",
+        "Pick the nearest upcoming Saturday",
+        "Implement --find-comp flag"
+      ],
+      "pass_criteria": [
+        "python3 scraper.py --find-comp prints competition name, date, and compid",
+        "Printed date is a Saturday",
+        "compid is a numeric string",
+        "If no Saturday comp found, prints 'No upcoming Saturday competition found' and exits 0"
+      ],
+      "fail_criteria": [
+        "Script raises an unhandled exception",
+        "Printed date is not a Saturday",
+        "No output produced",
+        "Wrong compid extracted (non-numeric or from a different date)"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Tee Sheet Parsing",
+      "goal": "Fetch the competition detail page and parse all tee times and player names.",
+      "files_created": [],
+      "files_modified": [
+        "scraper.py"
+      ],
+      "implementation_notes": [
+        "GET https://www.stannesoldlinks.com/competition2.php?tab=details&compid=<COMPID>",
+        "With --debug flag, save raw HTML to debug_output.html",
+        "Use BeautifulSoup to find tee time rows",
+        "Each row should have: time (HH:MM format) and 1-4 player name slots",
+        "Empty slots are blank/whitespace or a placeholder like '-'",
+        "Return list of dicts: [{time: '08:00', players: ['A Smith', '', 'B Jones', '']}]",
+        "Implement --parse-teesheet flag"
+      ],
+      "pass_criteria": [
+        "python3 scraper.py --parse-teesheet prints structured tee time rows with times and player names",
+        "debug_output.html is created when --debug flag is used",
+        "At least one tee time row is successfully parsed",
+        "Times are in HH:MM format",
+        "Empty player slots are represented as empty strings"
+      ],
+      "fail_criteria": [
+        "Script raises an unhandled exception or HTML parser error",
+        "Zero tee time rows printed",
+        "debug_output.html not created when --debug used",
+        "Times not in parseable format"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Analysis + Deduplication Logic",
+      "goal": "Compare player's tee time against cutoff and find available early slots. Deduplicate alerts.",
+      "files_created": [
+        "last_alert.json"
+      ],
+      "files_modified": [
+        "scraper.py"
+      ],
+      "implementation_notes": [
+        "Search parsed tee sheet for row where any player name contains PLAYER_NAME (case-insensitive partial match)",
+        "Extract player's time as datetime.time object",
+        "Compare against CUTOFF_TIME (parse from HH:MM string)",
+        "If player_time >= cutoff_time: find rows where time < cutoff_time AND at least one player slot is empty",
+        "Build list of available early slots: [{time: '08:30', empty_slots: 2}]",
+        "Load last_alert.json; compare available slots list with previous run",
+        "Only trigger alert if slots have changed",
+        "Save current slots to last_alert.json",
+        "Implement --analyse flag (prints result, does not send email)"
+      ],
+      "pass_criteria": [
+        "python3 scraper.py --analyse correctly identifies player's tee time from tee sheet",
+        "Correctly lists tee time rows before CUTOFF_TIME with empty slots",
+        "Running --analyse twice with no tee sheet changes produces same output (no duplicate state)",
+        "last_alert.json is written after each --analyse run",
+        "Setting CUTOFF_TIME=23:59 causes all early slots to be identified"
+      ],
+      "fail_criteria": [
+        "Player's tee time not found (when player is on tee sheet)",
+        "Wrong time comparison (e.g. string comparison instead of time comparison)",
+        "last_alert.json not written",
+        "Duplicate alert triggered on unchanged data",
+        "Unhandled exception"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Email Alert + End-to-End",
+      "goal": "Implement SMTP email sending and wire together the full run mode.",
+      "files_created": [],
+      "files_modified": [
+        "scraper.py"
+      ],
+      "implementation_notes": [
+        "Use smtplib.SMTP with STARTTLS for email sending",
+        "Email subject: 'Early tee time available - St Annes Old Links'",
+        "Email body: list available early slots with times and number of empty places",
+        "Implement --test-email flag: sends a test email with dummy content",
+        "Full run (no flags): login → find comp → parse tee sheet → analyse → send alert if needed",
+        "All log output via logging module with timestamps",
+        "Graceful error handling: catch and log exceptions, exit with code 1 on fatal error"
+      ],
+      "pass_criteria": [
+        "python3 scraper.py --test-email sends email and prints 'Email sent' and exits 0",
+        "Full run python3 scraper.py completes without unhandled exception",
+        "Email received contains correct tee time information when condition is met",
+        "python3 scraper.py >> /tmp/teetime.log 2>&1 produces clean timestamped log lines",
+        "Exit code 0 on success, 1 on fatal error"
+      ],
+      "fail_criteria": [
+        "SMTP authentication fails",
+        "Email not received within 2 minutes of send",
+        "Unhandled exception in full run",
+        "Log output contains raw tracebacks (should be caught and logged cleanly)",
+        "Exit code not set appropriately"
+      ]
+    }
+  ],
+  "scheduling": {
+    "method": "cron",
+    "example_crontab": "*/5 * * * * cd /path/to/TeetimeFinder && python3 scraper.py >> /var/log/teetime.log 2>&1",
+    "recommended_interval_minutes": 5
+  },
+  "overall_pass_criteria": [
+    "Setting CUTOFF_TIME=23:59 causes an alert email to be sent",
+    "Email contains accurate tee time data from the live site",
+    "Running twice with unchanged tee sheet sends only one email",
+    "Full run completes in under 30 seconds",
+    "Cron log output is clean and timestamped"
+  ]
+}

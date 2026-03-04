@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:www.stannesoldlinks.com)",
+      "Bash(pip install:*)",
+      "Bash(python3:*)",
+      "Skill(ralph-loop:ralph-loop)",
+      "Bash(CUTOFF_TIME=23:59 python3:*)",
+      "Bash(rm:*)",
+      "Bash(CUTOFF_TIME=12:00 python3:*)",
+      "Bash(ssh server:*)"
+    ]
+  }
+}

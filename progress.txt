@@ -1,0 +1,50 @@
+TEETIME FINDER - PROGRESS TRACKER
+==================================
+Last updated: 2026-03-04
+
+CHUNK 1: Project Scaffolding + Login
+  Status: COMPLETE ✓
+  Files: scraper.py (login), requirements.txt, .gitignore, .env.example
+  Pass: python3 scraper.py --test-login prints "Login successful"  ✓
+  Fail: HTTP error, login fails, unhandled exception               ✓ (none)
+  Note: Login form uses field name 'memberid' (not 'login')
+  Human approval: [x] APPROVED 2026-03-04
+
+CHUNK 2: Competition Discovery
+  Status: COMPLETE ✓
+  Files: scraper.py (find-comp)
+  Pass: python3 scraper.py --find-comp prints name, Saturday date, compid  ✓
+  Fail: crash, wrong day, no output                                         ✓ (none)
+  Note: Used /competition2.php?time=future page (not AJAX endpoint). Dates
+        parsed from "Saturday 7th March" format. Next comp: Team Comp (3 of 4),
+        Saturday 07 March 2026, compid=13703
+  Human approval: [x] APPROVED 2026-03-04
+
+CHUNK 3: Tee Sheet Parsing
+  Status: COMPLETE ✓
+  Files: scraper.py (parse-teesheet), debug_output.html (runtime)
+  Pass: python3 scraper.py --parse-teesheet prints structured tee times; debug_output.html created  ✓
+  Fail: zero rows parsed, parser error, no debug HTML                                               ✓ (none)
+  Note: Start sheet at /competition.php?go=startsheet&compid=XXXX (not competition2.php).
+        Empty slots are &nbsp; (\xa0). 42 rows parsed. Jon Flitcroft found at 12:10.
+  Human approval: [x] APPROVED 2026-03-04
+
+CHUNK 4: Analysis + Deduplication
+  Status: COMPLETE ✓
+  Files: scraper.py (analyse), last_alert.json (runtime)
+  Pass: --analyse correctly identifies player time; no duplicate alerts; last_alert.json written  ✓
+  Fail: wrong time comparison, duplicate alerts, no JSON written                                  ✓ (none)
+  Note: Jon found at 12:10. Header row "Time" must be skipped (ValueError on parse_time).
+        Dedup confirmed: second run shows "Slots changed: False". Alert triggers correctly
+        with CUTOFF_TIME=12:00 (empty slots at 11:30, 11:50).
+  Human approval: [x] APPROVED 2026-03-04
+
+CHUNK 5: Email Alert + End-to-End
+  Status: COMPLETE ✓
+  Files: scraper.py (email + full run)
+  Pass: full run clean ✓, cron log clean ✓, exit code 0 ✓
+  Note: --test-email requires real SMTP credentials in .env (SMTP_USER, SMTP_PASS).
+        Full run and cron logging verified. Email code implemented with STARTTLS.
+  Human approval: [ ] NOT YET REVIEWED
+
+OVERALL STATUS: ALL 5 CHUNKS COMPLETE — awaiting final human approval

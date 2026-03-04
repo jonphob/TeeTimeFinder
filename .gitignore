@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+last_alert.json
+debug_output.html
+*.log
+.DS_Store

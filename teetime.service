@@ -1,0 +1,12 @@
+[Unit]
+Description=TeetimeFinder - Check for early tee times
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=jon
+WorkingDirectory=/srv/apps/teetime_scraper
+ExecStart=/srv/apps/teetime_scraper/.venv/bin/python /srv/apps/teetime_scraper/scraper.py
+StandardOutput=journal
+StandardError=journal
