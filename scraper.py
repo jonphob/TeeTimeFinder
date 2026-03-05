@@ -28,6 +28,8 @@ MEMBER_ID = os.getenv("MEMBER_ID")
 MEMBER_PIN = os.getenv("MEMBER_PIN")
 PLAYER_NAME = os.getenv("PLAYER_NAME")
 CUTOFF_TIME = os.getenv("CUTOFF_TIME", "10:00")
+ACTIVE_START = os.getenv("ACTIVE_START", "06:00")
+ACTIVE_END   = os.getenv("ACTIVE_END",   "23:00")
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -467,6 +469,32 @@ def send_alert_email(comp: dict, result: dict) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Active hours
+# ---------------------------------------------------------------------------
+
+
+def is_within_active_hours() -> bool:
+    """Return True if current local time falls within [ACTIVE_START, ACTIVE_END)."""
+    fmt = "%H:%M"
+    default_start, default_end = "06:00", "23:00"
+    try:
+        start = datetime.strptime(ACTIVE_START, fmt).time()
+    except ValueError:
+        log.warning(f"Invalid ACTIVE_START '{ACTIVE_START}', using default {default_start}")
+        start = datetime.strptime(default_start, fmt).time()
+    try:
+        end = datetime.strptime(ACTIVE_END, fmt).time()
+    except ValueError:
+        log.warning(f"Invalid ACTIVE_END '{ACTIVE_END}', using default {default_end}")
+        end = datetime.strptime(default_end, fmt).time()
+    now = datetime.now().time()
+    if start <= end:
+        return start <= now < end
+    # Cross-midnight window (e.g. 22:00–06:00)
+    return now >= start or now < end
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -598,6 +626,12 @@ def main():
     # Full run
     result = {"player_not_entered": True, "alert_needed": False, "available_early_slots": []}
     alert_sent = False
+
+    if not any(vars(args).values()) and not is_within_active_hours():
+        log.info("Skipped due to time window")
+        write_metrics(result, alert_sent, run_success=True)
+        sys.exit(0)
+
     try:
         session = login()
 
