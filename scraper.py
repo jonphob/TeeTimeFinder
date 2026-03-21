@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 TeetimeFinder - Monitor St Annes Old Links competition tee sheet
-and alert when an early tee time becomes available.
+and alert when an early tee time becomes available...
 """
 
 import argparse
@@ -29,7 +29,7 @@ MEMBER_PIN = os.getenv("MEMBER_PIN")
 PLAYER_NAME = os.getenv("PLAYER_NAME")
 CUTOFF_TIME = os.getenv("CUTOFF_TIME", "10:00")
 ACTIVE_START = os.getenv("ACTIVE_START", "06:00")
-ACTIVE_END   = os.getenv("ACTIVE_END",   "23:00")
+ACTIVE_END = os.getenv("ACTIVE_END", "23:00")
 SECURED_COOLDOWN_MINUTES = int(os.getenv("SECURED_COOLDOWN_MINUTES", "30"))
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
@@ -59,9 +59,9 @@ log = logging.getLogger(__name__)
 def login() -> requests.Session:
     """Authenticate with the club website and return an authenticated session."""
     session = requests.Session()
-    session.headers.update({
-        "User-Agent": "Mozilla/5.0 (compatible; TeetimeFinder/1.0)"
-    })
+    session.headers.update(
+        {"User-Agent": "Mozilla/5.0 (compatible; TeetimeFinder/1.0)"}
+    )
 
     log.info("Fetching login page...")
     resp = session.get(LOGIN_URL, timeout=30)
@@ -91,7 +91,9 @@ def login() -> requests.Session:
     pin_input = soup_after.find("input", {"name": "pin"})
 
     if pin_input is not None:
-        raise RuntimeError("Login failed: PIN input field still present after login attempt")
+        raise RuntimeError(
+            "Login failed: PIN input field still present after login attempt"
+        )
 
     log.info("Login successful.")
     return session
@@ -183,7 +185,9 @@ def find_next_saturday_comp(session: requests.Session) -> dict | None:
 STARTSHEET_URL = f"{BASE_URL}/competition.php?go=startsheet&compid={{compid}}"
 
 
-def parse_teesheet(session: requests.Session, compid: str, debug: bool = False) -> list[dict]:
+def parse_teesheet(
+    session: requests.Session, compid: str, debug: bool = False
+) -> list[dict]:
     """
     Fetch and parse the competition start sheet.
     Returns list of dicts: [{time: '08:00', players: ['A Smith', '', 'B Jones', '']}]
@@ -294,7 +298,9 @@ def analyse(tee_times: list[dict]) -> dict:
             continue
         empty_count = sum(1 for p in row["players"] if not p)
         if empty_count > 0:
-            available_early_slots.append({"time": row["time"], "empty_slots": empty_count})
+            available_early_slots.append(
+                {"time": row["time"], "empty_slots": empty_count}
+            )
 
     alert_needed = len(available_early_slots) > 0
     if alert_needed:
@@ -357,11 +363,13 @@ def save_last_alert(result: dict) -> None:
         # Player lost their early slot or isn't on the sheet — reset.
         state.pop("player_secured_at", None)
 
-    state.update({
-        "timestamp": datetime.now().isoformat(),
-        "player_time": player_time,
-        "available_early_slots": result.get("available_early_slots", []),
-    })
+    state.update(
+        {
+            "timestamp": datetime.now().isoformat(),
+            "player_time": player_time,
+            "available_early_slots": result.get("available_early_slots", []),
+        }
+    )
     with open(LAST_ALERT_FILE, "w") as f:
         json.dump(state, f, indent=2)
 
@@ -435,17 +443,25 @@ def send_daily_digest(comp: dict | None, result: dict) -> None:
     if comp is None:
         lines.append("Next competition: no upcoming Saturday competition found.")
     else:
-        lines.append(f"Next competition: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}")
+        lines.append(
+            f"Next competition: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}"
+        )
         if result.get("player_not_entered"):
             lines.append(f"Status: '{PLAYER_NAME}' not yet on the tee sheet.")
         else:
-            lines.append(f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})")
+            lines.append(
+                f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})"
+            )
             if result["alert_needed"]:
                 lines.append(f"Early slots available before {CUTOFF_TIME}:")
                 for slot in result["available_early_slots"]:
-                    lines.append(f"  {slot['time']}  ({slot['empty_slots']} empty place(s))")
+                    lines.append(
+                        f"  {slot['time']}  ({slot['empty_slots']} empty place(s))"
+                    )
             else:
-                lines.append("No early slots currently available — nothing to move to yet.")
+                lines.append(
+                    "No early slots currently available — nothing to move to yet."
+                )
 
     lines += ["", "— TeetimeFinder"]
 
@@ -467,7 +483,9 @@ def send_daily_digest(comp: dict | None, result: dict) -> None:
 def send_alert_email(comp: dict, result: dict) -> None:
     """Send an email alert listing available early tee times."""
     slots = result["available_early_slots"]
-    subject = f"Early tee time available — {comp['name']} ({comp['date'].strftime('%d %b')})"
+    subject = (
+        f"Early tee time available — {comp['name']} ({comp['date'].strftime('%d %b')})"
+    )
 
     lines = [
         f"Hi Jon,",
@@ -516,7 +534,9 @@ def is_within_active_hours() -> bool:
     try:
         start = datetime.strptime(ACTIVE_START, fmt).time()
     except ValueError:
-        log.warning(f"Invalid ACTIVE_START '{ACTIVE_START}', using default {default_start}")
+        log.warning(
+            f"Invalid ACTIVE_START '{ACTIVE_START}', using default {default_start}"
+        )
         start = datetime.strptime(default_start, fmt).time()
     try:
         end = datetime.strptime(ACTIVE_END, fmt).time()
@@ -538,12 +558,22 @@ def is_within_active_hours() -> bool:
 def main():
     parser = argparse.ArgumentParser(description="TeetimeFinder")
     parser.add_argument("--test-login", action="store_true", help="Test login only")
-    parser.add_argument("--find-comp", action="store_true", help="Find next Saturday competition")
-    parser.add_argument("--parse-teesheet", action="store_true", help="Parse competition tee sheet")
-    parser.add_argument("--analyse", action="store_true", help="Analyse tee sheet for early slots")
+    parser.add_argument(
+        "--find-comp", action="store_true", help="Find next Saturday competition"
+    )
+    parser.add_argument(
+        "--parse-teesheet", action="store_true", help="Parse competition tee sheet"
+    )
+    parser.add_argument(
+        "--analyse", action="store_true", help="Analyse tee sheet for early slots"
+    )
     parser.add_argument("--test-email", action="store_true", help="Send a test email")
-    parser.add_argument("--daily-digest", action="store_true", help="Send daily status/heartbeat email")
-    parser.add_argument("--debug", action="store_true", help="Save raw HTML to debug_output.html")
+    parser.add_argument(
+        "--daily-digest", action="store_true", help="Send daily status/heartbeat email"
+    )
+    parser.add_argument(
+        "--debug", action="store_true", help="Save raw HTML to debug_output.html"
+    )
     args = parser.parse_args()
 
     if args.test_login:
@@ -581,11 +611,15 @@ def main():
             if not tee_times:
                 print("No tee time rows parsed.")
                 sys.exit(1)
-            print(f"\nStart sheet: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}")
+            print(
+                f"\nStart sheet: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}"
+            )
             print(f"{'Time':<8} {'Players'}")
             print("-" * 70)
             for row in tee_times:
-                players_str = " | ".join(f"{p if p else '(empty)'}" for p in row["players"])
+                players_str = " | ".join(
+                    f"{p if p else '(empty)'}" for p in row["players"]
+                )
                 print(f"{row['time']:<8} {players_str}")
             sys.exit(0)
         except Exception as exc:
@@ -602,15 +636,23 @@ def main():
             tee_times = parse_teesheet(session, comp["compid"], debug=args.debug)
             result = analyse(tee_times)
 
-            print(f"\nAnalysis: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}")
+            print(
+                f"\nAnalysis: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}"
+            )
             if result["player_not_entered"]:
-                print(f"Status: '{PLAYER_NAME}' not found on tee sheet (not yet entered?)")
+                print(
+                    f"Status: '{PLAYER_NAME}' not found on tee sheet (not yet entered?)"
+                )
             else:
-                print(f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})")
+                print(
+                    f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})"
+                )
                 if result["alert_needed"]:
                     print("Early slots available BEFORE cutoff:")
                     for slot in result["available_early_slots"]:
-                        print(f"  {slot['time']}  ({slot['empty_slots']} empty place(s))")
+                        print(
+                            f"  {slot['time']}  ({slot['empty_slots']} empty place(s))"
+                        )
                 else:
                     print("No early slots currently available.")
 
@@ -628,7 +670,11 @@ def main():
             session = login()
             comp = find_next_saturday_comp(session)
             if not comp:
-                comp = {"name": "Test Competition", "date": date.today(), "compid": "00000"}
+                comp = {
+                    "name": "Test Competition",
+                    "date": date.today(),
+                    "compid": "00000",
+                }
             test_result = {
                 "player_time": "12:10",
                 "available_early_slots": [
@@ -647,7 +693,11 @@ def main():
         try:
             session = login()
             comp = find_next_saturday_comp(session)
-            digest_result = {"player_not_entered": True, "alert_needed": False, "available_early_slots": []}
+            digest_result = {
+                "player_not_entered": True,
+                "alert_needed": False,
+                "available_early_slots": [],
+            }
             if comp:
                 tee_times = parse_teesheet(session, comp["compid"], debug=args.debug)
                 if tee_times:
@@ -662,7 +712,11 @@ def main():
     # Full run — time window guard applies only to unattended cron runs.
     # CLI flags (--daily-digest, --test-*, etc.) bypass the check intentionally
     # as they run on their own timers or are invoked manually.
-    result = {"player_not_entered": True, "alert_needed": False, "available_early_slots": []}
+    result = {
+        "player_not_entered": True,
+        "alert_needed": False,
+        "available_early_slots": [],
+    }
     alert_sent = False
 
     if not any(vars(args).values()) and not is_within_active_hours():
