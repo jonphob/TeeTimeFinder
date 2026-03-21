@@ -15,7 +15,8 @@ pipeline {
         stage('Lint') {
             steps {
                 sh '''
-                    ${VENV_PATH}/bin/pip install --quiet flake8
+                    ${VENV_PATH}/bin/python3 -m ensurepip --upgrade
+                    ${VENV_PATH}/bin/python3 -m pip install --quiet flake8
                     ${VENV_PATH}/bin/python3 -m flake8 scraper.py --max-line-length=120
                 '''
             }
@@ -24,7 +25,7 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                    ${VENV_PATH}/bin/pip install --quiet -r requirements.txt
+                    ${VENV_PATH}/bin/python3 -m pip install --quiet -r requirements.txt
                     ${VENV_PATH}/bin/python3 -m py_compile scraper.py
                     echo "Compile check passed"
                 '''
@@ -40,7 +41,7 @@ pipeline {
                     rsync -av --exclude='.git' --exclude='.venv-ci' --exclude='__pycache__' \
                         ./ ${DEPLOY_PATH}/
 
-                    ${VENV_PATH}/bin/pip install --quiet -r ${DEPLOY_PATH}/requirements.txt
+                    ${VENV_PATH}/bin/python3 -m pip install --quiet -r ${DEPLOY_PATH}/requirements.txt
 
                     sudo systemctl daemon-reload
                     sudo systemctl restart ${SERVICE_NAME}
