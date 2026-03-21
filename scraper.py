@@ -30,6 +30,7 @@ PLAYER_NAME = os.getenv("PLAYER_NAME")
 CUTOFF_TIME = os.getenv("CUTOFF_TIME", "10:00")
 ACTIVE_START = os.getenv("ACTIVE_START", "06:00")
 ACTIVE_END   = os.getenv("ACTIVE_END",   "23:00")
+SECURED_COOLDOWN_MINUTES = int(os.getenv("SECURED_COOLDOWN_MINUTES", "30"))
 SMTP_HOST = os.getenv("SMTP_HOST")
 SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER")
@@ -309,25 +310,60 @@ def analyse(tee_times: list[dict]) -> dict:
     }
 
 
-def load_last_alert() -> list:
-    """Load previously alerted slots from last_alert.json."""
+def _load_state() -> dict:
+    """Load raw state dict from last_alert.json."""
     if not os.path.exists(LAST_ALERT_FILE):
-        return []
+        return {}
     try:
         with open(LAST_ALERT_FILE) as f:
-            return json.load(f).get("available_early_slots", [])
+            return json.load(f)
     except (json.JSONDecodeError, KeyError):
-        return []
+        return {}
+
+
+def load_last_alert() -> list:
+    """Load previously alerted slots from last_alert.json."""
+    return _load_state().get("available_early_slots", [])
+
+
+def is_player_secured() -> bool:
+    """
+    Return True if the player was confirmed in an early slot recently enough
+    that we can skip the full scrape this run.
+    """
+    state = _load_state()
+    secured_at_str = state.get("player_secured_at")
+    if not secured_at_str:
+        return False
+    try:
+        secured_at = datetime.fromisoformat(secured_at_str)
+    except ValueError:
+        return False
+    age = (datetime.now() - secured_at).total_seconds() / 60
+    return age < SECURED_COOLDOWN_MINUTES
 
 
 def save_last_alert(result: dict) -> None:
     """Persist current alert state to last_alert.json."""
+    state = _load_state()
+    player_time = result.get("player_time")
+    player_t = parse_time(player_time) if player_time else None
+    cutoff = parse_time(CUTOFF_TIME)
+
+    # If player is confirmed in an early slot, stamp the secured time.
+    if player_t is not None and player_t < cutoff:
+        state["player_secured_at"] = datetime.now().isoformat()
+    else:
+        # Player lost their early slot or isn't on the sheet — reset.
+        state.pop("player_secured_at", None)
+
+    state.update({
+        "timestamp": datetime.now().isoformat(),
+        "player_time": player_time,
+        "available_early_slots": result.get("available_early_slots", []),
+    })
     with open(LAST_ALERT_FILE, "w") as f:
-        json.dump({
-            "timestamp": datetime.now().isoformat(),
-            "player_time": result["player_time"],
-            "available_early_slots": result["available_early_slots"],
-        }, f, indent=2)
+        json.dump(state, f, indent=2)
 
 
 def slots_changed(current: list, previous: list) -> bool:
@@ -623,12 +659,23 @@ def main():
             log.error(f"Failed to send daily digest: {exc}")
             sys.exit(1)
 
-    # Full run
+    # Full run — time window guard applies only to unattended cron runs.
+    # CLI flags (--daily-digest, --test-*, etc.) bypass the check intentionally
+    # as they run on their own timers or are invoked manually.
     result = {"player_not_entered": True, "alert_needed": False, "available_early_slots": []}
     alert_sent = False
 
     if not any(vars(args).values()) and not is_within_active_hours():
         log.info("Skipped due to time window")
+        write_metrics(result, alert_sent, run_success=True)
+        sys.exit(0)
+
+    if not any(vars(args).values()) and is_player_secured():
+        log.info(
+            f"Player has an early tee time secured — skipping scrape "
+            f"(cooldown: {SECURED_COOLDOWN_MINUTES} min). "
+            "Set SECURED_COOLDOWN_MINUTES=0 to disable."
+        )
         write_metrics(result, alert_sent, run_success=True)
         sys.exit(0)
 
@@ -651,6 +698,7 @@ def main():
 
         if result["player_not_entered"]:
             log.info(f"'{PLAYER_NAME}' not on tee sheet yet — no action.")
+            save_last_alert(result)  # clears player_secured_at if set
             write_metrics(result, alert_sent, run_success=True)
             sys.exit(0)
 
