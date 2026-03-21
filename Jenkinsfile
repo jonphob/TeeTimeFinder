@@ -14,7 +14,7 @@ pipeline {
     stages {
         stage('Lint') {
             steps {
-                sh 'python3 -m flake8 scraper.py --max-line-length=120'
+                sh 'flake8 scraper.py --max-line-length=120'
             }
         }
 
