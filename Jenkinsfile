@@ -22,9 +22,6 @@ pipeline {
         }
 
         stage('Deploy') {
-            when {
-                branch 'main'
-            }
             steps {
                 sh '''
                     rsync -av --exclude='.git' --exclude='.venv-ci' --exclude='__pycache__' \
