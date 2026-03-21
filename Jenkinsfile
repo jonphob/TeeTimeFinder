@@ -15,8 +15,8 @@ pipeline {
         stage('Lint') {
             steps {
                 sh '''
-                    python3 -m pip install --quiet --user flake8
-                    python3 -m flake8 scraper.py --max-line-length=120
+                    ${VENV_PATH}/bin/pip install --quiet flake8
+                    ${VENV_PATH}/bin/python3 -m flake8 scraper.py --max-line-length=120
                 '''
             }
         }
@@ -24,8 +24,8 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                    python3 -m pip install --quiet --user -r requirements.txt
-                    python3 -m py_compile scraper.py
+                    ${VENV_PATH}/bin/pip install --quiet -r requirements.txt
+                    ${VENV_PATH}/bin/python3 -m py_compile scraper.py
                     echo "Compile check passed"
                 '''
             }
