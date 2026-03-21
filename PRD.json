@@ -104,7 +104,7 @@
   "chunks": [
     {
       "id": 1,
-      "name": "Project Scaffolding + Login",
+      "name": "Project Scaffolding + Login,",
       "goal": "Create project structure and implement member login with session cookie handling.",
       "files_created": [
         "scraper.py",
