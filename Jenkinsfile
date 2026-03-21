@@ -15,9 +15,8 @@ pipeline {
         stage('Lint') {
             steps {
                 sh '''
-                    ${VENV_PATH}/bin/python3 -m ensurepip --upgrade
-                    ${VENV_PATH}/bin/python3 -m pip install --quiet flake8
-                    ${VENV_PATH}/bin/python3 -m flake8 scraper.py --max-line-length=120
+                    sudo apt-get install -y --quiet flake8
+                    python3 -m flake8 scraper.py --max-line-length=120
                 '''
             }
         }
@@ -25,8 +24,8 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                    ${VENV_PATH}/bin/python3 -m pip install --quiet -r requirements.txt
-                    ${VENV_PATH}/bin/python3 -m py_compile scraper.py
+                    sudo apt-get install -y --quiet python3-requests python3-bs4 python3-dotenv
+                    python3 -m py_compile scraper.py
                     echo "Compile check passed"
                 '''
             }
