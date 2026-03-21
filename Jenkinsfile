@@ -27,8 +27,6 @@ pipeline {
                     rsync -av --exclude='.git' --exclude='.venv-ci' --exclude='__pycache__' \
                         ./ ${DEPLOY_PATH}/
 
-                    ${VENV_PATH}/bin/python3 -m pip install --quiet -r ${DEPLOY_PATH}/requirements.txt
-
                     sudo systemctl daemon-reload
                     sudo systemctl restart ${SERVICE_NAME}
                     sudo systemctl is-active --quiet ${SERVICE_NAME} && echo "Timer active" || (echo "Timer failed to start" && exit 1)
