@@ -14,17 +14,13 @@ pipeline {
     stages {
         stage('Lint') {
             steps {
-                sh '''
-                    sudo apt-get install -y --quiet flake8
-                    python3 -m flake8 scraper.py --max-line-length=120
-                '''
+                sh 'python3 -m flake8 scraper.py --max-line-length=120'
             }
         }
 
         stage('Test') {
             steps {
                 sh '''
-                    sudo apt-get install -y --quiet python3-requests python3-bs4 python3-dotenv
                     python3 -m py_compile scraper.py
                     echo "Compile check passed"
                 '''
