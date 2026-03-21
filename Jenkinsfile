@@ -7,8 +7,6 @@ pipeline {
 
     environment {
         DEPLOY_PATH = '/srv/apps/teetime_scraper'
-        VENV_PATH   = "${DEPLOY_PATH}/.venv"
-        SERVICE_NAME = 'teetime.timer'
     }
 
     stages {
@@ -26,10 +24,6 @@ pipeline {
                 sh '''
                     rsync -av --exclude='.git' --exclude='.venv-ci' --exclude='__pycache__' \
                         ./ ${DEPLOY_PATH}/
-
-                    sudo systemctl daemon-reload
-                    sudo systemctl restart ${SERVICE_NAME}
-                    sudo systemctl is-active --quiet ${SERVICE_NAME} && echo "Timer active" || (echo "Timer failed to start" && exit 1)
                 '''
             }
         }
