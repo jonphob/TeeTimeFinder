@@ -32,6 +32,7 @@ pipeline {
                         --exclude='Jenkinsfile' \
                         --exclude='grafana_dashboard.json' \
                         --exclude='progress.txt' \
+                        --exclude='.env.example' \
                         --exclude='.gitignore' \
                         --exclude='debug_output.html' \
                         ./ ${DEPLOY_PATH}/
