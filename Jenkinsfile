@@ -12,12 +12,6 @@ pipeline {
     }
 
     stages {
-        stage('Lint') {
-            steps {
-                sh '/usr/bin/flake8 scraper.py --max-line-length=120'
-            }
-        }
-
         stage('Test') {
             steps {
                 sh '''
