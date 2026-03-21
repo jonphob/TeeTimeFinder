@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    triggers {
+        githubPush()
+    }
+
     environment {
         DEPLOY_PATH = '/srv/apps/teetime_scraper'
         VENV_PATH   = "${DEPLOY_PATH}/.venv"
