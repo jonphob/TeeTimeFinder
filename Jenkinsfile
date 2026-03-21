@@ -15,10 +15,8 @@ pipeline {
         stage('Lint') {
             steps {
                 sh '''
-                    python3 -m venv .venv-ci
-                    . .venv-ci/bin/activate
-                    pip install --quiet flake8
-                    flake8 scraper.py --max-line-length=120
+                    pip3 install --quiet --user flake8
+                    python3 -m flake8 scraper.py --max-line-length=120
                 '''
             }
         }
@@ -26,8 +24,7 @@ pipeline {
         stage('Test') {
             steps {
                 sh '''
-                    . .venv-ci/bin/activate
-                    pip install --quiet -r requirements.txt
+                    pip3 install --quiet --user -r requirements.txt
                     python3 -m py_compile scraper.py
                     echo "Compile check passed"
                 '''
@@ -55,7 +52,6 @@ pipeline {
 
     post {
         always {
-            sh 'rm -rf .venv-ci'
             cleanWs()
         }
         failure {
