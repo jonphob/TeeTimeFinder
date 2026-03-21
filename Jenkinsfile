@@ -22,7 +22,18 @@ pipeline {
         stage('Deploy') {
             steps {
                 sh '''
-                    rsync -av --exclude='.git' --exclude='.venv-ci' --exclude='__pycache__' \
+                    rsync -av \
+                        --exclude='.git' \
+                        --exclude='__pycache__' \
+                        --exclude='.claude' \
+                        --exclude='CLAUDE.md' \
+                        --exclude='PRD.md' \
+                        --exclude='PRD.json' \
+                        --exclude='Jenkinsfile' \
+                        --exclude='grafana_dashboard.json' \
+                        --exclude='progress.txt' \
+                        --exclude='.gitignore' \
+                        --exclude='debug_output.html' \
                         ./ ${DEPLOY_PATH}/
                 '''
             }
