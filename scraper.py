@@ -11,7 +11,7 @@ import os
 import re
 import smtplib
 import sys
-from datetime import datetime, date, timedelta
+from datetime import datetime, date
 from email.mime.text import MIMEText
 
 import requests
@@ -129,8 +129,6 @@ def parse_comp_date(date_str: str) -> date | None:
 
 def find_next_saturday_comp(session: requests.Session) -> dict | None:
     """Find the next upcoming Saturday competition. Returns dict or None."""
-    import re as _re
-
     log.info("Fetching upcoming competitions list...")
     resp = session.get(COMP_LIST_URL, timeout=30)
     resp.raise_for_status()
@@ -157,25 +155,25 @@ def find_next_saturday_comp(session: requests.Session) -> dict | None:
 
         comp_date = parse_comp_date(date_text)
         if comp_date is None:
-            log.warning(f"Could not parse date: {date_text!r}")
+            log.warning("Could not parse date: %r", date_text)
             continue
 
-        # On a Saturday, skip today's comp — it's too late to swap slots.
-        today = date.today()
-        if today.weekday() == 5 and comp_date == today:
-            log.info(f"Skipping today's competition ({name}) — looking ahead.")
-            continue
-
-        link = name_div.find("a", href=_re.compile(r"compid="))
+        link = name_div.find("a", href=re.compile(r"compid="))
         if not link:
             continue
 
-        compid_match = _re.search(r"compid=(\d+)", link["href"])
+        compid_match = re.search(r"compid=(\d+)", link["href"])
         if not compid_match:
             continue
 
         compid = compid_match.group(1)
         name = link.get_text(strip=True)
+
+        # On a Saturday, skip today's comp — it's too late to swap slots.
+        today = date.today()
+        if today.weekday() == 5 and comp_date == today:
+            log.info("Skipping today's competition (%s) — looking ahead.", name)
+            continue
 
         saturday_comps.append({"compid": compid, "name": name, "date": comp_date})
 
@@ -203,7 +201,7 @@ def parse_teesheet(
     Empty player slots are represented as empty strings.
     """
     url = STARTSHEET_URL.format(compid=compid)
-    log.info(f"Fetching start sheet for compid={compid}...")
+    log.info("Fetching start sheet for compid=%s...", compid)
     resp = session.get(url, timeout=30)
     resp.raise_for_status()
 
@@ -236,7 +234,7 @@ def parse_teesheet(
 
         tee_times.append({"time": time_str, "players": players})
 
-    log.info(f"Parsed {len(tee_times)} tee time rows.")
+    log.info("Parsed %d tee time rows.", len(tee_times))
     return tee_times
 
 
@@ -276,7 +274,7 @@ def analyse(tee_times: list[dict]) -> dict:
             break
 
     if player_time is None:
-        log.info(f"Player '{PLAYER_NAME}' not found on tee sheet.")
+        log.info("Player '%s' not found on tee sheet.", PLAYER_NAME)
         return {
             "player_time": None,
             "player_not_entered": True,
@@ -285,7 +283,9 @@ def analyse(tee_times: list[dict]) -> dict:
         }
 
     player_t = parse_time(player_time)
-    log.info(f"Player '{PLAYER_NAME}' found at {player_time} (cutoff {CUTOFF_TIME})")
+    log.info(
+        "Player '%s' found at %s (cutoff %s)", PLAYER_NAME, player_time, CUTOFF_TIME
+    )
 
     if player_t < cutoff:
         log.info("Player already has an early tee time — no alert needed.")
@@ -313,7 +313,9 @@ def analyse(tee_times: list[dict]) -> dict:
 
     alert_needed = len(available_early_slots) > 0
     if alert_needed:
-        log.info(f"Alert needed: {len(available_early_slots)} early slot(s) available.")
+        log.info(
+            "Alert needed: %d early slot(s) available.", len(available_early_slots)
+        )
     else:
         log.info("Player is late but no early slots currently available.")
 
@@ -330,7 +332,7 @@ def _load_state() -> dict:
     if not os.path.exists(LAST_ALERT_FILE):
         return {}
     try:
-        with open(LAST_ALERT_FILE) as f:
+        with open(LAST_ALERT_FILE, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, KeyError):
         return {}
@@ -379,7 +381,7 @@ def save_last_alert(result: dict) -> None:
             "available_early_slots": result.get("available_early_slots", []),
         }
     )
-    with open(LAST_ALERT_FILE, "w") as f:
+    with open(LAST_ALERT_FILE, "w", encoding="utf-8") as f:
         json.dump(state, f, indent=2)
 
 
@@ -430,11 +432,11 @@ def write_metrics(result: dict, alert_sent: bool, run_success: bool) -> None:
     ]
 
     try:
-        with open(PROM_FILE, "w") as f:
+        with open(PROM_FILE, "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
-        log.info(f"Metrics written to {PROM_FILE}")
+        log.info("Metrics written to %s", PROM_FILE)
     except OSError as e:
-        log.warning(f"Could not write metrics file: {e}")
+        log.warning("Could not write metrics file: %s", e)
 
 
 # ---------------------------------------------------------------------------
@@ -460,7 +462,7 @@ def send_telegram(message: str) -> None:
     if resp.ok:
         log.info("Telegram message sent.")
     else:
-        log.error(f"Telegram send failed: {resp.status_code} {resp.text}")
+        log.error("Telegram send failed: %s %s", resp.status_code, resp.text)
 
 
 # ---------------------------------------------------------------------------
@@ -508,7 +510,7 @@ def send_daily_digest(comp: dict | None, result: dict) -> None:
         msg["From"] = SMTP_USER
         msg["To"] = ALERT_TO
 
-        log.info(f"Sending daily digest email to {ALERT_TO}...")
+        log.info("Sending daily digest email to %s...", ALERT_TO)
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
             smtp.ehlo()
             smtp.starttls()
@@ -528,23 +530,23 @@ def send_alert(comp: dict, result: dict) -> None:
     )
 
     lines = [
-        f"Hi Jon,",
-        f"",
-        f"An early tee time has become available for:",
+        f"Hi {PLAYER_NAME},",
+        "",
+        "An early tee time has become available for:",
         f"  {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}",
-        f"",
+        "",
         f"Your current tee time: {result['player_time']}",
         f"Cutoff time:           {CUTOFF_TIME}",
-        f"",
+        "",
         f"Available slots before {CUTOFF_TIME}:",
     ]
     for slot in slots:
         lines.append(f"  {slot['time']}  ({slot['empty_slots']} empty place(s))")
     lines += [
-        f"",
+        "",
         f"Book at: https://www.stannesoldlinks.com/competition.php?go=startsheet&compid={comp['compid']}",
-        f"",
-        f"— TeetimeFinder",
+        "",
+        "— TeetimeFinder",
     ]
 
     body = "\n".join(lines)
@@ -555,7 +557,7 @@ def send_alert(comp: dict, result: dict) -> None:
         msg["From"] = SMTP_USER
         msg["To"] = ALERT_TO
 
-        log.info(f"Sending alert email to {ALERT_TO}...")
+        log.info("Sending alert email to %s...", ALERT_TO)
         with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
             smtp.ehlo()
             smtp.starttls()
@@ -580,13 +582,15 @@ def is_within_active_hours() -> bool:
         start = datetime.strptime(ACTIVE_START, fmt).time()
     except ValueError:
         log.warning(
-            f"Invalid ACTIVE_START '{ACTIVE_START}', using default {default_start}"
+            "Invalid ACTIVE_START '%s', using default %s", ACTIVE_START, default_start
         )
         start = datetime.strptime(default_start, fmt).time()
     try:
         end = datetime.strptime(ACTIVE_END, fmt).time()
     except ValueError:
-        log.warning(f"Invalid ACTIVE_END '{ACTIVE_END}', using default {default_end}")
+        log.warning(
+            "Invalid ACTIVE_END '%s', using default %s", ACTIVE_END, default_end
+        )
         end = datetime.strptime(default_end, fmt).time()
     now = datetime.now().time()
     if start <= end:
@@ -601,6 +605,7 @@ def is_within_active_hours() -> bool:
 
 
 def main():
+    """Main entry point. Parses CLI args for testing/debugging, otherwise runs the full scraper+analysis+alert flow with time window and secured cooldown guards."""
     parser = argparse.ArgumentParser(description="TeetimeFinder")
     parser.add_argument("--test-login", action="store_true", help="Test login only")
     parser.add_argument(
@@ -631,7 +636,7 @@ def main():
             login()
             print("Login successful")
             sys.exit(0)
-        except Exception as exc:
+        except Exception as exc:  # pylint: disable=broad-except
             print(f"Login failed: {exc}")
             sys.exit(1)
 
@@ -646,8 +651,8 @@ def main():
             else:
                 print("No upcoming Saturday competition found")
             sys.exit(0)
-        except Exception as exc:
-            log.error(f"Error finding competition: {exc}")
+        except Exception as exc:  # pylint: disable=broad-except
+            log.error("Error finding competition: %s", exc)
             sys.exit(1)
 
     if args.parse_teesheet:
@@ -672,8 +677,8 @@ def main():
                 )
                 print(f"{row['time']:<8} {players_str}")
             sys.exit(0)
-        except Exception as exc:
-            log.error(f"Error parsing tee sheet: {exc}")
+        except Exception as exc:  # pylint: disable=broad-except
+            log.error("Error parsing tee sheet: %s", exc)
             sys.exit(1)
 
     if args.analyse:
@@ -711,8 +716,8 @@ def main():
             save_last_alert(result)
             print(f"\nSlots changed since last run: {changed}")
             sys.exit(0)
-        except Exception as exc:
-            log.error(f"Error during analysis: {exc}")
+        except Exception as exc:  # pylint: disable=broad-except
+            log.error("Error during analysis: %s", exc)
             sys.exit(1)
 
     if args.test_email:
@@ -735,8 +740,8 @@ def main():
             send_alert(comp, test_result)
             print("Email sent")
             sys.exit(0)
-        except Exception as exc:
-            log.error(f"Failed to send email: {exc}")
+        except Exception as exc:  # pylint: disable=broad-except
+            log.error("Failed to send email: %s", exc)
             sys.exit(1)
 
     if args.test_telegram:
@@ -766,8 +771,8 @@ def main():
             send_daily_digest(comp, digest_result)
             print("Daily digest sent")
             sys.exit(0)
-        except Exception as exc:
-            log.error(f"Failed to send daily digest: {exc}")
+        except Exception as exc:  # pylint: disable=broad-except
+            log.error("Failed to send daily digest: %s", exc)
             sys.exit(1)
 
     # Full run — time window guard applies only to unattended cron runs.
@@ -787,9 +792,9 @@ def main():
 
     if not any(vars(args).values()) and is_player_secured():
         log.info(
-            f"Player has an early tee time secured — skipping scrape "
-            f"(cooldown: {SECURED_COOLDOWN_MINUTES} min). "
-            "Set SECURED_COOLDOWN_MINUTES=0 to disable."
+            "Player has an early tee time secured — skipping scrape "
+            "(cooldown: %d min). Set SECURED_COOLDOWN_MINUTES=0 to disable.",
+            SECURED_COOLDOWN_MINUTES,
         )
         write_metrics(result, alert_sent, run_success=True)
         sys.exit(0)
@@ -812,7 +817,7 @@ def main():
         result = analyse(tee_times)
 
         if result["player_not_entered"]:
-            log.info(f"'{PLAYER_NAME}' not on tee sheet yet — no action.")
+            log.info("'%s' not on tee sheet yet — no action.", PLAYER_NAME)
             save_last_alert(result)  # clears player_secured_at if set
             write_metrics(result, alert_sent, run_success=True)
             sys.exit(0)
@@ -836,7 +841,7 @@ def main():
         sys.exit(0)
 
     except Exception as exc:
-        log.error(f"Unexpected error: {exc}")
+        log.error("Unexpected error: %s", exc)
         write_metrics(result, alert_sent, run_success=False)
         sys.exit(1)
 
