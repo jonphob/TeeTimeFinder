@@ -160,6 +160,12 @@ def find_next_saturday_comp(session: requests.Session) -> dict | None:
             log.warning(f"Could not parse date: {date_text!r}")
             continue
 
+        # On a Saturday, skip today's comp — it's too late to swap slots.
+        today = date.today()
+        if today.weekday() == 5 and comp_date == today:
+            log.info(f"Skipping today's competition ({name}) — looking ahead.")
+            continue
+
         link = name_div.find("a", href=_re.compile(r"compid="))
         if not link:
             continue
