@@ -37,6 +37,9 @@ SMTP_USER = os.getenv("SMTP_USER")
 SMTP_PASS = os.getenv("SMTP_PASS")
 ALERT_TO = os.getenv("ALERT_TO")
 
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+
 BASE_URL = "https://www.stannesoldlinks.com"
 LOGIN_URL = f"{BASE_URL}/member_login"
 
@@ -429,12 +432,38 @@ def write_metrics(result: dict, alert_sent: bool, run_success: bool) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Telegram
+# ---------------------------------------------------------------------------
+
+
+def _telegram_enabled() -> bool:
+    return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
+
+
+def send_telegram(message: str) -> None:
+    """Send a message via Telegram Bot API."""
+    if not _telegram_enabled():
+        log.warning("Telegram not configured — skipping.")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    resp = requests.post(
+        url,
+        json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
+        timeout=10,
+    )
+    if resp.ok:
+        log.info("Telegram message sent.")
+    else:
+        log.error(f"Telegram send failed: {resp.status_code} {resp.text}")
+
+
+# ---------------------------------------------------------------------------
 # Email Alert
 # ---------------------------------------------------------------------------
 
 
 def send_daily_digest(comp: dict | None, result: dict) -> None:
-    """Send a daily status/heartbeat email confirming the system is running."""
+    """Send a daily status/heartbeat via email and/or Telegram."""
     now = datetime.now()
     subject = f"TeetimeFinder daily digest — {now.strftime('%a %d %b %Y')}"
 
@@ -466,22 +495,27 @@ def send_daily_digest(comp: dict | None, result: dict) -> None:
     lines += ["", "— TeetimeFinder"]
 
     body = "\n".join(lines)
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USER
-    msg["To"] = ALERT_TO
 
-    log.info(f"Sending daily digest to {ALERT_TO}...")
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.sendmail(SMTP_USER, [ALERT_TO], msg.as_string())
-    log.info("Daily digest sent.")
+    if SMTP_HOST and SMTP_USER:
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = SMTP_USER
+        msg["To"] = ALERT_TO
+
+        log.info(f"Sending daily digest email to {ALERT_TO}...")
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(SMTP_USER, SMTP_PASS)
+            smtp.sendmail(SMTP_USER, [ALERT_TO], msg.as_string())
+        log.info("Daily digest email sent.")
+
+    if _telegram_enabled():
+        send_telegram(f"<b>{subject}</b>\n\n{body}")
 
 
-def send_alert_email(comp: dict, result: dict) -> None:
-    """Send an email alert listing available early tee times."""
+def send_alert(comp: dict, result: dict) -> None:
+    """Send an alert listing available early tee times via email and/or Telegram."""
     slots = result["available_early_slots"]
     subject = (
         f"Early tee time available — {comp['name']} ({comp['date'].strftime('%d %b')})"
@@ -508,18 +542,23 @@ def send_alert_email(comp: dict, result: dict) -> None:
     ]
 
     body = "\n".join(lines)
-    msg = MIMEText(body)
-    msg["Subject"] = subject
-    msg["From"] = SMTP_USER
-    msg["To"] = ALERT_TO
 
-    log.info(f"Sending alert email to {ALERT_TO}...")
-    with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
-        smtp.ehlo()
-        smtp.starttls()
-        smtp.login(SMTP_USER, SMTP_PASS)
-        smtp.sendmail(SMTP_USER, [ALERT_TO], msg.as_string())
-    log.info("Email sent.")
+    if SMTP_HOST and SMTP_USER:
+        msg = MIMEText(body)
+        msg["Subject"] = subject
+        msg["From"] = SMTP_USER
+        msg["To"] = ALERT_TO
+
+        log.info(f"Sending alert email to {ALERT_TO}...")
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT, timeout=30) as smtp:
+            smtp.ehlo()
+            smtp.starttls()
+            smtp.login(SMTP_USER, SMTP_PASS)
+            smtp.sendmail(SMTP_USER, [ALERT_TO], msg.as_string())
+        log.info("Alert email sent.")
+
+    if _telegram_enabled():
+        send_telegram(f"<b>{subject}</b>\n\n{body}")
 
 
 # ---------------------------------------------------------------------------
@@ -568,6 +607,11 @@ def main():
         "--analyse", action="store_true", help="Analyse tee sheet for early slots"
     )
     parser.add_argument("--test-email", action="store_true", help="Send a test email")
+    parser.add_argument(
+        "--test-telegram",
+        action="store_true",
+        help="Send a test Telegram message",
+    )
     parser.add_argument(
         "--daily-digest", action="store_true", help="Send daily status/heartbeat email"
     )
@@ -682,12 +726,23 @@ def main():
                     {"time": "09:00", "empty_slots": 1},
                 ],
             }
-            send_alert_email(comp, test_result)
+            send_alert(comp, test_result)
             print("Email sent")
             sys.exit(0)
         except Exception as exc:
             log.error(f"Failed to send email: {exc}")
             sys.exit(1)
+
+    if args.test_telegram:
+        if not _telegram_enabled():
+            print("TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set in .env")
+            sys.exit(1)
+        send_telegram(
+            "<b>TeetimeFinder test</b>\n\n"
+            "If you can read this, Telegram notifications are working."
+        )
+        print("Telegram message sent")
+        sys.exit(0)
 
     if args.daily_digest:
         try:
@@ -768,7 +823,7 @@ def main():
             write_metrics(result, alert_sent, run_success=True)
             sys.exit(0)
 
-        send_alert_email(comp, result)
+        send_alert(comp, result)
         alert_sent = True
         save_last_alert(result)
         write_metrics(result, alert_sent, run_success=True)
