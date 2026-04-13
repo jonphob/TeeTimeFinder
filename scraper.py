@@ -254,12 +254,13 @@ def analyse(tee_times: list[dict]) -> dict:
     """
     Analyse the tee sheet.
     Returns a dict:
-      {
-        player_time: str | None,       # e.g. '12:10', or None if not found
-        player_not_entered: bool,
-        alert_needed: bool,
-        available_early_slots: [{'time': str, 'empty_slots': int}]
-      }
+        {
+          player_time: str | None,       # e.g. '12:10', or None if not found
+          player_not_entered: bool,
+          player_has_early_time: bool,
+          alert_needed: bool,
+          available_early_slots: [{'time': str, 'empty_slots': int}]
+        }
     """
     cutoff = parse_time(CUTOFF_TIME)
     player_name_lower = PLAYER_NAME.lower()
@@ -278,6 +279,7 @@ def analyse(tee_times: list[dict]) -> dict:
         return {
             "player_time": None,
             "player_not_entered": True,
+            "player_has_early_time": False,
             "alert_needed": False,
             "available_early_slots": [],
         }
@@ -292,6 +294,7 @@ def analyse(tee_times: list[dict]) -> dict:
         return {
             "player_time": player_time,
             "player_not_entered": False,
+            "player_has_early_time": True,
             "alert_needed": False,
             "available_early_slots": [],
         }
@@ -322,6 +325,7 @@ def analyse(tee_times: list[dict]) -> dict:
     return {
         "player_time": player_time,
         "player_not_entered": False,
+        "player_has_early_time": False,
         "alert_needed": alert_needed,
         "available_early_slots": available_early_slots,
     }
@@ -489,7 +493,11 @@ def send_daily_digest(comp: dict | None, result: dict) -> None:
             lines.append(
                 f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})"
             )
-            if result["alert_needed"]:
+            if result.get("player_has_early_time"):
+                lines.append(
+                    f"You already have an early tee time before {CUTOFF_TIME} — no move needed."
+                )
+            elif result["alert_needed"]:
                 lines.append(f"Early slots available before {CUTOFF_TIME}:")
                 for slot in result["available_early_slots"]:
                     lines.append(
@@ -702,7 +710,9 @@ def main():
                 print(
                     f"Your tee time: {result['player_time']}  (cutoff: {CUTOFF_TIME})"
                 )
-                if result["alert_needed"]:
+                if result.get("player_has_early_time"):
+                    print(f"You already have an early tee time before {CUTOFF_TIME}.")
+                elif result["alert_needed"]:
                     print("Early slots available BEFORE cutoff:")
                     for slot in result["available_early_slots"]:
                         print(
@@ -761,6 +771,7 @@ def main():
             comp = find_next_saturday_comp(session)
             digest_result = {
                 "player_not_entered": True,
+                "player_has_early_time": False,
                 "alert_needed": False,
                 "available_early_slots": [],
             }
@@ -780,6 +791,7 @@ def main():
     # as they run on their own timers or are invoked manually.
     result = {
         "player_not_entered": True,
+        "player_has_early_time": False,
         "alert_needed": False,
         "available_early_slots": [],
     }
