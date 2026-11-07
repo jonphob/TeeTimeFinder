@@ -194,11 +194,12 @@ STARTSHEET_URL = f"{BASE_URL}/competition.php?go=startsheet&compid={{compid}}"
 
 def parse_teesheet(
     session: requests.Session, compid: str, debug: bool = False
-) -> list[dict]:
+) -> list[dict] | None:
     """
     Fetch and parse the competition start sheet.
     Returns list of dicts: [{time: '08:00', players: ['A Smith', '', 'B Jones', '']}]
     Empty player slots are represented as empty strings.
+    Returns None if the club has not yet made the tee times visible.
     """
     url = STARTSHEET_URL.format(compid=compid)
     log.info("Fetching start sheet for compid=%s...", compid)
@@ -212,6 +213,9 @@ def parse_teesheet(
 
     soup = BeautifulSoup(resp.text, "html.parser")
     table = soup.find("table", class_="startsheettable")
+    if not table and "not yet been made visible" in soup.get_text():
+        log.info("Tee times not yet visible for compid=%s.", compid)
+        return None
     if not table:
         log.warning("No startsheettable found on start sheet page.")
         return []
@@ -458,11 +462,19 @@ def send_telegram(message: str) -> None:
         log.warning("Telegram not configured — skipping.")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    resp = requests.post(
-        url,
-        json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
-        timeout=10,
-    )
+    try:
+        resp = requests.post(
+            url,
+            json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"},
+            timeout=20,
+        )
+    except requests.exceptions.RequestException as exc:
+        # Telegram is a best-effort secondary channel and the email has already
+        # been sent by the time we get here, so a transport error (timeout, DNS,
+        # connection reset) must not fail the whole run. A non-OK *response* is
+        # already handled as non-fatal below; this makes transport errors match.
+        log.warning("Telegram send failed (transport error): %s", exc)
+        return
     if resp.ok:
         log.info("Telegram message sent.")
     else:
@@ -697,7 +709,7 @@ def main():
                 print("No upcoming Saturday competition found")
                 sys.exit(0)
             tee_times = parse_teesheet(session, comp["compid"], debug=args.debug)
-            result = analyse(tee_times)
+            result = analyse(tee_times or [])
 
             print(
                 f"\nAnalysis: {comp['name']} — {comp['date'].strftime('%A %d %B %Y')}"
@@ -821,6 +833,10 @@ def main():
             sys.exit(0)
 
         tee_times = parse_teesheet(session, comp["compid"], debug=args.debug)
+        if tee_times is None:
+            log.info("Tee sheet not published yet — nothing to do.")
+            write_metrics(result, alert_sent, run_success=True)
+            sys.exit(0)
         if not tee_times:
             log.warning("Could not parse tee sheet — aborting.")
             write_metrics(result, alert_sent, run_success=False)
