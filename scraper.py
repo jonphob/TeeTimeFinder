@@ -199,7 +199,8 @@ def parse_teesheet(
     Fetch and parse the competition start sheet.
     Returns list of dicts: [{time: '08:00', players: ['A Smith', '', 'B Jones', '']}]
     Empty player slots are represented as empty strings.
-    Returns None if the club has not yet made the tee times visible.
+    Returns None if the club has not yet made the tee times visible, or if
+    the competition is a shotgun start (everyone tees off at once).
     """
     url = STARTSHEET_URL.format(compid=compid)
     log.info("Fetching start sheet for compid=%s...", compid)
@@ -219,6 +220,9 @@ def parse_teesheet(
     if not table:
         log.warning("No startsheettable found on start sheet page.")
         return []
+    if "shotguntable" in table.get("class", []):
+        log.info("Shotgun start for compid=%s — no tee times to rank.", compid)
+        return None
 
     tee_times = []
     for row in table.find_all("tr"):
@@ -834,7 +838,7 @@ def main():
 
         tee_times = parse_teesheet(session, comp["compid"], debug=args.debug)
         if tee_times is None:
-            log.info("Tee sheet not published yet — nothing to do.")
+            log.info("No tee times to check (not published or shotgun) — nothing to do.")
             write_metrics(result, alert_sent, run_success=True)
             sys.exit(0)
         if not tee_times:
